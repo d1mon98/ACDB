@@ -1,0 +1,11 @@
+# Backend dependencies for Electrical Project Standalone DB.
+# Versions are pinned for reproducible installs.  Install with:
+#   pip install -r requirements.txt
+
+fastapi==0.136.1
+uvicorn[standard]==0.47.0
+SQLAlchemy==2.0.49
+pydantic==2.13.4
+alembic==1.18.4
+openpyxl==3.1.5
+python-multipart==0.0.29

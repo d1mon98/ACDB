@@ -1,0 +1,120 @@
+"""ORM model package.
+
+Importing this package imports every model, which registers all tables on
+``Base.metadata`` -- exactly what Alembic's autogenerate and the seed script
+need.
+"""
+
+from __future__ import annotations
+
+from .catalogs import (
+    CatalogCable,
+    CatalogDevice,
+    CatalogEquipment,
+    CatalogInstrument,
+    CatalogIOModule,
+    CatalogManufacturer,
+)
+from .enums import (
+    AlarmPriority,
+    CableEnd,
+    CalcStatus,
+    CalcType,
+    ConductorMaterial,
+    ConduitMaterial,
+    ConduitType,
+    DeviceCategory,
+    DrawingStatus,
+    DrawingType,
+    EquipmentCategory,
+    IndoorOutdoor,
+    InstrumentType,
+    IOType,
+    IssueStage,
+    NetworkDeviceType,
+    NetworkProtocol,
+    ProjectStatus,
+    QAQCCategory,
+    QAQCSeverity,
+    QAQCStatus,
+    RouteType,
+    TerminationType,
+    UL508AStatus,
+)
+from .pipeline import ProjectPipelineProgress
+from .projects import (
+    Project,
+    ProjectCable,
+    ProjectCableRoute,
+    ProjectCalculation,
+    ProjectConduit,
+    ProjectControlPanel,
+    ProjectDrawing,
+    ProjectEquipment,
+    ProjectFeeder,
+    ProjectInstrument,
+    ProjectIOPoint,
+    ProjectLocation,
+    ProjectNetworkDevice,
+    ProjectPanelCircuit,
+    ProjectPanelComponent,
+    ProjectQAQCCheck,
+    ProjectTerminalBlock,
+    ProjectTermination,
+)
+
+__all__ = [
+    # Class A -- catalogs
+    "CatalogManufacturer",
+    "CatalogEquipment",
+    "CatalogCable",
+    "CatalogInstrument",
+    "CatalogIOModule",
+    "CatalogDevice",
+    # Class B -- project tables
+    "Project",
+    "ProjectLocation",
+    "ProjectEquipment",
+    "ProjectFeeder",
+    "ProjectPanelCircuit",
+    "ProjectCable",
+    "ProjectCableRoute",
+    "ProjectConduit",
+    "ProjectInstrument",
+    "ProjectIOPoint",
+    "ProjectControlPanel",
+    "ProjectPanelComponent",
+    "ProjectTerminalBlock",
+    "ProjectTermination",
+    "ProjectNetworkDevice",
+    "ProjectDrawing",
+    "ProjectCalculation",
+    "ProjectQAQCCheck",
+    # pipeline
+    "ProjectPipelineProgress",
+    # enums
+    "AlarmPriority",
+    "CableEnd",
+    "CalcStatus",
+    "CalcType",
+    "ConductorMaterial",
+    "ConduitMaterial",
+    "ConduitType",
+    "DeviceCategory",
+    "DrawingStatus",
+    "DrawingType",
+    "EquipmentCategory",
+    "IndoorOutdoor",
+    "InstrumentType",
+    "IOType",
+    "IssueStage",
+    "NetworkDeviceType",
+    "NetworkProtocol",
+    "ProjectStatus",
+    "QAQCCategory",
+    "QAQCSeverity",
+    "QAQCStatus",
+    "RouteType",
+    "TerminationType",
+    "UL508AStatus",
+]

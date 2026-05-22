@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>AutoCAD_Database_Plugin</AssemblyName>
+    <RootNamespace>AcDbPlugin</RootNamespace>
+    <OutputType>Library</OutputType>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <!--
+      Override with:  dotnet build /p:AcadDir="C:\Program Files\Autodesk\AutoCAD 2024"
+    -->
+    <AcadDir Condition="'$(AcadDir)' == ''">C:\Program Files\Autodesk\AutoCAD 2024</AcadDir>
+  </PropertyGroup>
+
+  <!--
+    AutoCAD managed API assemblies.
+    Copy Local = False keeps them out of the output folder — AutoCAD already loads them.
+    PaletteSet and AddVisual require AutoCAD 2019+ (AcWindows v23+).
+  -->
+  <ItemGroup>
+    <Reference Include="accoremgd">
+      <HintPath>$(AcadDir)\accoremgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="acdbmgd">
+      <HintPath>$(AcadDir)\acdbmgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="acmgd">
+      <HintPath>$(AcadDir)\acmgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AcWindows">
+      <HintPath>$(AcadDir)\AcWindows.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <!-- Ribbon API: RibbonTab, RibbonButton, ComponentManager, etc. -->
+    <Reference Include="AdWindows">
+      <HintPath>$(AcadDir)\AdWindows.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- SQLite — native interop DLLs are copied to output via the package build targets -->
+  <ItemGroup>
+    <PackageReference Include="System.Data.SQLite" Version="1.0.118" />
+  </ItemGroup>
+
+</Project>

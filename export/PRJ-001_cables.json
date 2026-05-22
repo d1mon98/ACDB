@@ -1,0 +1,38 @@
+[
+  {
+    "cable_tag": "C-001",
+    "service_description": "480V MCC FEED",
+    "from_tag": "SWGR-1",
+    "from_terminal": "L1",
+    "to_tag": "MCC-1A",
+    "to_terminal": "LINE",
+    "conduit_tag": "",
+    "length_ft": 85.0,
+    "length_ft_actual": null,
+    "num_conductors_used": null,
+    "conductor_size_awg_kcmil": "",
+    "voltage_drop_pct": null,
+    "drawing_ref": "",
+    "sheet_number": "",
+    "status": "DESIGN",
+    "notes": ""
+  },
+  {
+    "cable_tag": "C-002",
+    "service_description": "SPARE",
+    "from_tag": "SWGR-1",
+    "from_terminal": "L2",
+    "to_tag": "MCC-1A",
+    "to_terminal": "LINE2",
+    "conduit_tag": "",
+    "length_ft": 85.0,
+    "length_ft_actual": null,
+    "num_conductors_used": null,
+    "conductor_size_awg_kcmil": "",
+    "voltage_drop_pct": null,
+    "drawing_ref": "",
+    "sheet_number": "",
+    "status": "DESIGN",
+    "notes": ""
+  }
+]

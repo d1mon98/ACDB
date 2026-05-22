@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "dgSpecHash": "JGAxpigmTUI=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\ieshk\\Documents\\Obsidian\\Knowledge Base\\Knowledge Base\\AutoCAD Lisp\\ACDB\\plugin\\AutoCAD_Database_Plugin.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\ieshk\\.nuget\\packages\\entityframework\\6.4.4\\entityframework.6.4.4.nupkg.sha512",
+    "C:\\Users\\ieshk\\.nuget\\packages\\microsoft.netframework.referenceassemblies\\1.0.3\\microsoft.netframework.referenceassemblies.1.0.3.nupkg.sha512",
+    "C:\\Users\\ieshk\\.nuget\\packages\\microsoft.netframework.referenceassemblies.net48\\1.0.3\\microsoft.netframework.referenceassemblies.net48.1.0.3.nupkg.sha512",
+    "C:\\Users\\ieshk\\.nuget\\packages\\stub.system.data.sqlite.core.netframework\\1.0.118\\stub.system.data.sqlite.core.netframework.1.0.118.nupkg.sha512",
+    "C:\\Users\\ieshk\\.nuget\\packages\\system.data.sqlite\\1.0.118\\system.data.sqlite.1.0.118.nupkg.sha512",
+    "C:\\Users\\ieshk\\.nuget\\packages\\system.data.sqlite.core\\1.0.118\\system.data.sqlite.core.1.0.118.nupkg.sha512",
+    "C:\\Users\\ieshk\\.nuget\\packages\\system.data.sqlite.ef6\\1.0.118\\system.data.sqlite.ef6.1.0.118.nupkg.sha512",
+    "C:\\Users\\ieshk\\.nuget\\packages\\system.data.sqlite.linq\\1.0.118\\system.data.sqlite.linq.1.0.118.nupkg.sha512"
+  ],
+  "logs": []
+}

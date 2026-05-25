@@ -24,14 +24,26 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
 
 from .config import APP_NAME, BACKEND_DIR
-from .db_manager import manager
-from .routers import catalogs, databases, filesystem, project_tables, projects
+from .db_manager import catalog_manager, project_manager
+from .routers import (
+    catalog_groups,
+    catalogs,
+    catalogs_ext,
+    custom_tables,
+    databases,
+    erd,
+    filesystem,
+    project_tables,
+    projects,
+    usage,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """On startup, reconnect to the last-used database if one is available."""
-    manager.startup()
+    """Reconnect to the last-used catalog and project databases on startup."""
+    catalog_manager.startup()
+    project_manager.startup()
     yield
 
 
@@ -94,11 +106,20 @@ def health() -> dict[str, str]:
 
 
 # --- routers --------------------------------------------------------------
-app.include_router(databases.router)
+app.include_router(databases.catalog_router)
+app.include_router(databases.project_router)
+app.include_router(databases.legacy_router)
+app.include_router(databases.status_router)
 app.include_router(filesystem.router)
+app.include_router(erd.router)
+app.include_router(catalog_groups.router)
+app.include_router(custom_tables.router)
+app.include_router(usage.router)
 app.include_router(projects.router)
 for catalog_router in catalogs.routers:
     app.include_router(catalog_router)
+for ext_router in catalogs_ext.routers:
+    app.include_router(ext_router)
 for project_table_router in project_tables.routers:
     app.include_router(project_table_router)
 

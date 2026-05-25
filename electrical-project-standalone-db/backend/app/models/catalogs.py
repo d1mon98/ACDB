@@ -29,6 +29,9 @@ class CatalogManufacturer(Base, CommonMixin):
 
     __tablename__ = "catalog_manufacturers"
 
+    catalog_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("catalog_groups.id", ondelete="SET NULL"), index=True
+    )
     name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     abbreviation: Mapped[str | None] = mapped_column(String(20))
     country: Mapped[str | None] = mapped_column(String(60))
@@ -43,6 +46,9 @@ class CatalogEquipment(Base, CommonMixin):
 
     __tablename__ = "catalog_equipment"
 
+    catalog_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("catalog_groups.id", ondelete="SET NULL"), index=True
+    )
     manufacturer_id: Mapped[int | None] = mapped_column(
         ForeignKey("catalog_manufacturers.id", ondelete="RESTRICT")
     )
@@ -65,6 +71,9 @@ class CatalogCable(Base, CommonMixin):
 
     __tablename__ = "catalog_cables"
 
+    catalog_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("catalog_groups.id", ondelete="SET NULL"), index=True
+    )
     cable_type_code: Mapped[str] = mapped_column(String(60), nullable=False, unique=True)
     conductor_material: Mapped[ConductorMaterial | None] = mapped_column(
         Enum(ConductorMaterial, native_enum=False)
@@ -84,6 +93,9 @@ class CatalogInstrument(Base, CommonMixin):
 
     __tablename__ = "catalog_instruments"
 
+    catalog_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("catalog_groups.id", ondelete="SET NULL"), index=True
+    )
     manufacturer_id: Mapped[int | None] = mapped_column(
         ForeignKey("catalog_manufacturers.id", ondelete="RESTRICT")
     )
@@ -105,6 +117,9 @@ class CatalogIOModule(Base, CommonMixin):
 
     __tablename__ = "catalog_io_modules"
 
+    catalog_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("catalog_groups.id", ondelete="SET NULL"), index=True
+    )
     manufacturer_id: Mapped[int | None] = mapped_column(
         ForeignKey("catalog_manufacturers.id", ondelete="RESTRICT")
     )
@@ -122,6 +137,9 @@ class CatalogDevice(Base, CommonMixin):
 
     __tablename__ = "catalog_devices"
 
+    catalog_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("catalog_groups.id", ondelete="SET NULL"), index=True
+    )
     manufacturer_id: Mapped[int | None] = mapped_column(
         ForeignKey("catalog_manufacturers.id", ondelete="RESTRICT")
     )

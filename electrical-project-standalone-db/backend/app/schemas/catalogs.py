@@ -19,6 +19,7 @@ from .common import ORMModel, make_optional
 
 
 class ManufacturerCreate(ORMModel):
+    catalog_group_id: int | None = None
     name: str
     abbreviation: str | None = None
     country: str | None = None
@@ -40,6 +41,7 @@ ManufacturerUpdate = make_optional(ManufacturerCreate, "ManufacturerUpdate")
 
 
 class EquipmentCreate(ORMModel):
+    catalog_group_id: int | None = None
     manufacturer_id: int | None = None
     category: EquipmentCategory
     model_series: str
@@ -69,6 +71,7 @@ EquipmentUpdate = make_optional(EquipmentCreate, "EquipmentUpdate")
 
 
 class CableCreate(ORMModel):
+    catalog_group_id: int | None = None
     cable_type_code: str
     conductor_material: ConductorMaterial | None = None
     insulation_type: str | None = None
@@ -97,6 +100,7 @@ CableUpdate = make_optional(CableCreate, "CableUpdate")
 
 
 class InstrumentCreate(ORMModel):
+    catalog_group_id: int | None = None
     manufacturer_id: int | None = None
     instrument_type: InstrumentType
     measurement_principle: str | None = None
@@ -125,6 +129,7 @@ InstrumentUpdate = make_optional(InstrumentCreate, "InstrumentUpdate")
 
 
 class IOModuleCreate(ORMModel):
+    catalog_group_id: int | None = None
     manufacturer_id: int | None = None
     module_model: str
     io_type: IOType
@@ -149,6 +154,7 @@ IOModuleUpdate = make_optional(IOModuleCreate, "IOModuleUpdate")
 
 
 class DeviceCreate(ORMModel):
+    catalog_group_id: int | None = None
     manufacturer_id: int | None = None
     device_category: DeviceCategory
     model: str

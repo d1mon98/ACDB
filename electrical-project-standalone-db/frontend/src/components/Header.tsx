@@ -1,4 +1,4 @@
-// Top banner: the application name, the active-database indicator, and the
+// Top banner: app name, both database indicators (catalog + project), and the
 // project selector.  Class B chapters are scoped to the selected project;
 // Class A chapters ignore it.
 
@@ -8,14 +8,31 @@ interface Props {
   projects: Row[];
   selectedProjectId: number | null;
   onSelectProject: (id: number | null) => void;
-  dbStatus: ConnectionStatus;
+  catalogStatus: ConnectionStatus;
+  projectStatus: ConnectionStatus;
+}
+
+function StatusDot({ label, status }: { label: string; status: ConnectionStatus }) {
+  return (
+    <div className="db-status" title={status.path ?? "Not connected"}>
+      <span className={"db-dot " + (status.connected ? "db-dot-on" : "db-dot-off")} />
+      {status.connected ? (
+        <span>
+          {label}: <strong>{status.current}</strong>
+        </span>
+      ) : (
+        <span>{label}: <em>not connected</em></span>
+      )}
+    </div>
+  );
 }
 
 export default function Header({
   projects,
   selectedProjectId,
   onSelectProject,
-  dbStatus,
+  catalogStatus,
+  projectStatus,
 }: Props) {
   return (
     <header className="header">
@@ -25,34 +42,22 @@ export default function Header({
       </div>
 
       <div className="header-right">
-        <div className="db-status">
-          <span
-            className={
-              "db-dot " + (dbStatus.connected ? "db-dot-on" : "db-dot-off")
-            }
-          />
-          {dbStatus.connected ? (
-            <span>
-              Database: <strong>{dbStatus.current}</strong>
-            </span>
-          ) : (
-            <span>No database connected</span>
-          )}
-        </div>
+        <StatusDot label="Catalog" status={catalogStatus} />
+        <StatusDot label="Project" status={projectStatus} />
 
         <div className="project-picker">
           <label htmlFor="project-select">Active project:</label>
           <select
             id="project-select"
             value={selectedProjectId ?? ""}
-            disabled={!dbStatus.connected}
+            disabled={!projectStatus.connected}
             onChange={(e) =>
               onSelectProject(e.target.value ? Number(e.target.value) : null)
             }
           >
             {projects.length === 0 && (
               <option value="">
-                {dbStatus.connected ? "No projects yet" : "—"}
+                {projectStatus.connected ? "No projects yet" : "—"}
               </option>
             )}
             {projects.map((p) => (

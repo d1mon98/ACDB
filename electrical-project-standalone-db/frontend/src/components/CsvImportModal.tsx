@@ -63,7 +63,7 @@ export default function CsvImportModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={() => !busy && onClose()}>
+    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Import CSV — {chapter.title}</h3>

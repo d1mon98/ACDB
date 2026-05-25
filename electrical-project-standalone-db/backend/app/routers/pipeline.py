@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import importing, pipeline
-from ..database import get_db
+from ..database import get_project_db as get_db
 from ..models.pipeline import ProjectPipelineProgress
 from ..registry import (
     TABLES,

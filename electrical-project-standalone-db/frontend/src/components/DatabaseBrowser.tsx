@@ -1,16 +1,32 @@
-// Database Browser -- manage database files and the active connection.
+// Database Browser -- manage CATALOG and PROJECT databases independently.
 //
-// Databases in the managed project folder can be created, renamed, deleted and
-// connected.  A database file anywhere on disk can be opened with the file
-// picker, and recently opened databases are listed for quick reconnection.
+// The application owns two databases at runtime: one catalog DB (system
+// reference data, shared across projects) and one project DB (per-project
+// electrical data).  Each is managed by its own folder + CRUD client.
+// This screen stacks two identical panels, one per role.
 
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { DatabaseInfo, RecentDatabase } from "../types";
 import FileBrowserModal from "./FileBrowserModal";
 
-interface Props {
+interface BrowserProps {
   /** Called after any operation so the app can refresh its connection state. */
+  onConnectionChanged: () => void;
+}
+
+type DbClient = ReturnType<typeof makeNothing> extends never
+  ? typeof api.catalogDatabases
+  : never;
+
+function makeNothing() {
+  return undefined as never;
+}
+
+interface PanelProps {
+  title: string;
+  subtitle: string;
+  client: typeof api.catalogDatabases;
   onConnectionChanged: () => void;
 }
 
@@ -30,7 +46,7 @@ function formatDate(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
 }
 
-export default function DatabaseBrowser({ onConnectionChanged }: Props) {
+function DatabasePanel({ title, subtitle, client, onConnectionChanged }: PanelProps) {
   const [items, setItems] = useState<DatabaseInfo[]>([]);
   const [recent, setRecent] = useState<RecentDatabase[]>([]);
   const [currentPath, setCurrentPath] = useState<string | null>(null);
@@ -46,7 +62,7 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.databases.list();
+      const data = await client.list();
       setItems(data.items);
       setRecent(data.recent);
       setCurrentPath(data.path);
@@ -59,9 +75,9 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Run an operation, then refresh this view and notify the app.
   async function run(op: () => Promise<unknown>) {
     setError(null);
     try {
@@ -73,17 +89,9 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
     }
   }
 
-  function handleConnect(name: string) {
-    run(() => api.databases.connect(name));
-  }
-
-  function handleDisconnect() {
-    run(() => api.databases.disconnect());
-  }
-
-  function handleOpenPath(path: string) {
-    run(() => api.databases.open(path));
-  }
+  function handleConnect(name: string) { run(() => client.connect(name)); }
+  function handleDisconnect()           { run(() => client.disconnect()); }
+  function handleOpenPath(path: string) { run(() => client.open(path)); }
 
   function handleDelete(name: string) {
     if (
@@ -92,16 +100,11 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
           `all data in it. This cannot be undone.`,
       )
     ) {
-      run(() => api.databases.remove(name));
+      run(() => client.remove(name));
     }
   }
 
-  function openCreate() {
-    setNameInput("");
-    setError(null);
-    setModal({ mode: "create" });
-  }
-
+  function openCreate() { setNameInput(""); setError(null); setModal({ mode: "create" }); }
   function openRename(name: string) {
     setNameInput(name.replace(/\.db$/i, ""));
     setError(null);
@@ -113,11 +116,8 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
     setBusy(true);
     setError(null);
     try {
-      if (modal.mode === "create") {
-        await api.databases.create(nameInput);
-      } else {
-        await api.databases.rename(modal.target!, nameInput);
-      }
+      if (modal.mode === "create") await client.create(nameInput);
+      else await client.rename(modal.target!, nameInput);
       setModal(null);
       await load();
       onConnectionChanged();
@@ -135,20 +135,18 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
   }
 
   return (
-    <div className="chapter">
+    <div className="db-panel">
       <div className="chapter-head">
         <div>
-          <h2>Database Browser</h2>
-          <div className="chapter-sub">
-            Connect, create, open, rename and delete project databases
-          </div>
+          <h3>{title}</h3>
+          <div className="chapter-sub">{subtitle}</div>
         </div>
         <div className="toolbar-actions">
           <button className="btn" onClick={() => setFileBrowserOpen(true)}>
             Open from File System…
           </button>
           <button className="btn btn-primary" onClick={openCreate}>
-            + Create Database
+            + Create
           </button>
         </div>
       </div>
@@ -173,13 +171,11 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
 
       {loading && <div className="empty">Loading…</div>}
 
-      {/* --- managed project-folder databases --- */}
       {!loading && (
         <>
-          <div className="section-label">Databases in the project folder</div>
           {items.length === 0 ? (
             <div className="empty">
-              No databases in the project folder. Use “+ Create Database”.
+              No databases in this folder. Use “+ Create”.
             </div>
           ) : (
             <div className="grid-wrap">
@@ -196,26 +192,19 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
                 <tbody>
                   {items.map((db) => (
                     <tr key={db.path}>
-                      <td>
-                        <strong>{db.name}</strong>
-                      </td>
+                      <td><strong>{db.name}</strong></td>
                       <td>{formatSize(db.size_bytes)}</td>
                       <td>{formatDate(db.modified)}</td>
                       <td>
                         {db.connected ? (
-                          <span className="badge badge-connected">
-                            Connected
-                          </span>
+                          <span className="badge badge-connected">Connected</span>
                         ) : (
                           <span className="muted">Not connected</span>
                         )}
                       </td>
                       <td className="col-actions">
                         {db.connected ? (
-                          <button
-                            className="btn btn-sm"
-                            onClick={handleDisconnect}
-                          >
+                          <button className="btn btn-sm" onClick={handleDisconnect}>
                             Disconnect
                           </button>
                         ) : (
@@ -226,21 +215,14 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
                             Connect
                           </button>
                         )}
-                        <button
-                          className="btn btn-sm"
-                          onClick={() => openRename(db.name)}
-                        >
+                        <button className="btn btn-sm" onClick={() => openRename(db.name)}>
                           Rename
                         </button>
                         <button
                           className="btn btn-sm btn-danger"
                           onClick={() => handleDelete(db.name)}
                           disabled={db.connected}
-                          title={
-                            db.connected
-                              ? "Disconnect before deleting"
-                              : "Delete this database"
-                          }
+                          title={db.connected ? "Disconnect before deleting" : "Delete this database"}
                         >
                           Delete
                         </button>
@@ -252,26 +234,19 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
             </div>
           )}
 
-          {/* --- recently opened databases (incl. external files) --- */}
           {recent.length > 0 && (
             <>
-              <div className="section-label">Recent databases</div>
+              <div className="section-label">Recent</div>
               <div className="grid-wrap">
                 <table className="grid">
                   <tbody>
                     {recent.map((r) => (
                       <tr key={r.path}>
-                        <td>
-                          <strong>{r.name}</strong>
-                        </td>
-                        <td className="recent-path" title={r.path}>
-                          {r.path}
-                        </td>
+                        <td><strong>{r.name}</strong></td>
+                        <td className="recent-path" title={r.path}>{r.path}</td>
                         <td className="col-actions">
                           {r.path === currentPath ? (
-                            <span className="badge badge-connected">
-                              Connected
-                            </span>
+                            <span className="badge badge-connected">Connected</span>
                           ) : r.exists ? (
                             <button
                               className="btn btn-sm btn-primary"
@@ -294,62 +269,38 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
       )}
 
       {modal && (
-        <div className="modal-overlay" onClick={() => !busy && setModal(null)}>
+        <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) setModal(null); }}>
           <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>
-                {modal.mode === "create"
-                  ? "Create Database"
-                  : `Rename “${modal.target}”`}
+                {modal.mode === "create" ? `Create ${title}` : `Rename “${modal.target}”`}
               </h3>
-              <button
-                className="btn-icon"
-                onClick={() => !busy && setModal(null)}
-              >
-                &times;
-              </button>
+              <button className="btn-icon" onClick={() => !busy && setModal(null)}>×</button>
             </div>
             <div className="modal-body">
               <div className="field">
-                <label>
-                  Database name<span className="req">*</span>
-                </label>
+                <label>Database name<span className="req">*</span></label>
                 <input
                   className="input"
                   autoFocus
                   value={nameInput}
                   placeholder="e.g. flat-creek-wrf"
                   onChange={(e) => setNameInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !busy) submitModal();
-                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !busy) submitModal(); }}
                 />
                 <div className="field-hint">
                   Letters, numbers, spaces, hyphens and underscores. The “.db”
-                  extension is added automatically. New databases are created in
-                  the project folder.
+                  extension is added automatically.
                 </div>
               </div>
               {error && <div className="form-error">{error}</div>}
             </div>
             <div className="modal-footer">
-              <button
-                className="btn"
-                onClick={() => setModal(null)}
-                disabled={busy}
-              >
+              <button className="btn" onClick={() => setModal(null)} disabled={busy}>
                 Cancel
               </button>
-              <button
-                className="btn btn-primary"
-                onClick={submitModal}
-                disabled={busy}
-              >
-                {busy
-                  ? "Working…"
-                  : modal.mode === "create"
-                    ? "Create"
-                    : "Rename"}
+              <button className="btn btn-primary" onClick={submitModal} disabled={busy}>
+                {busy ? "Working…" : modal.mode === "create" ? "Create" : "Rename"}
               </button>
             </div>
           </div>
@@ -362,6 +313,39 @@ export default function DatabaseBrowser({ onConnectionChanged }: Props) {
           onOpened={handleFileOpened}
         />
       )}
+    </div>
+  );
+}
+
+export default function DatabaseBrowser({ onConnectionChanged }: BrowserProps) {
+  return (
+    <div className="chapter">
+      <div className="chapter-head">
+        <div>
+          <h2>Database Browser</h2>
+          <div className="chapter-sub">
+            The application uses two databases: a <strong>catalog</strong> DB
+            (system reference data, shared across all projects) and a{" "}
+            <strong>project</strong> DB (the actual electrical project rows).
+          </div>
+        </div>
+      </div>
+
+      <DatabasePanel
+        title="Catalog Database"
+        subtitle="System reference data — equipment / cables / instruments / catalog groups."
+        client={api.catalogDatabases}
+        onConnectionChanged={onConnectionChanged}
+      />
+
+      <div style={{ height: 24 }} />
+
+      <DatabasePanel
+        title="Project Database"
+        subtitle="Per-project electrical data — projects, equipment, cables, etc."
+        client={api.projectDatabases}
+        onConnectionChanged={onConnectionChanged}
+      />
     </div>
   );
 }

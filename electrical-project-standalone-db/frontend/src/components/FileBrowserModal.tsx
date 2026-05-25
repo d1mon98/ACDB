@@ -59,7 +59,7 @@ export default function FileBrowserModal({ onClose, onOpened }: Props) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => !opening && onClose()}>
+    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget && !opening) onClose(); }}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Open Database File</h3>

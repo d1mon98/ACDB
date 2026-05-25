@@ -8,12 +8,16 @@ the generic factory does not provide:
 * a full-export endpoint (every Class B row for one project, catalog-merged).
 """
 
+import sqlite3
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import crud
-from ..database import get_db
+from .. import db_manager as _dm
+from ..database import get_project_db as get_db
+from ..db_manager import project_manager
 from ..models.projects import (
     Project,
     ProjectCable,
@@ -72,7 +76,7 @@ def _get_project_or_404(db: Session, project_id: int) -> Project:
 @router.get("", response_model=ListResponse[ProjectRead])
 def list_projects(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(100, ge=1, le=2000),
     db: Session = Depends(get_db),
 ):
     rows, total = crud.list_items(db, Project, skip=skip, limit=limit)
@@ -81,7 +85,101 @@ def list_projects(
 
 @router.post("", response_model=ProjectRead, status_code=201)
 def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
-    return crud.create_item(db, Project, payload.model_dump())
+    project = crud.create_item(db, Project, payload.model_dump())
+    # Auto-create a standalone DB file for this project.
+    try:
+        project_manager.create_database(project.project_number)
+    except FileExistsError:
+        pass  # DB already exists — fine
+    except (ValueError, OSError):
+        pass  # Bad name or FS error — non-fatal, user can create manually
+    return project
+
+
+def _migrate_project_data(source_path: str, target_path: str, project_id: int) -> None:
+    """Copy one project's rows from source_path into target_path via raw SQLite."""
+    _dm._ensure_table_sets()
+    src = sqlite3.connect(source_path)
+    tgt = sqlite3.connect(target_path)
+    src.row_factory = sqlite3.Row
+    try:
+        tgt_tables = {r[0] for r in tgt.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()}
+
+        # Copy the project row itself.
+        row = src.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+        if row and "projects" in tgt_tables:
+            cols = ", ".join(row.keys())
+            ph = ", ".join("?" * len(row.keys()))
+            tgt.execute(
+                f"INSERT OR IGNORE INTO projects ({cols}) VALUES ({ph})", list(row)
+            )
+
+        # Copy every project_* table that exists in both DBs.
+        for table in sorted(_dm._PROJECT_TABLES or set()):
+            if table == "projects" or table not in tgt_tables:
+                continue
+            try:
+                rows = src.execute(
+                    f"SELECT * FROM {table} WHERE project_id=?", (project_id,)
+                ).fetchall()
+                if rows:
+                    cols = ", ".join(rows[0].keys())
+                    ph = ", ".join("?" * len(rows[0].keys()))
+                    tgt.executemany(
+                        f"INSERT OR IGNORE INTO {table} ({cols}) VALUES ({ph})",
+                        [list(r) for r in rows],
+                    )
+            except sqlite3.OperationalError:
+                pass  # column doesn't exist in source — skip
+
+        tgt.commit()
+    finally:
+        src.close()
+        tgt.close()
+
+
+@router.post("/{project_id}/activate")
+def activate_project(project_id: int, db: Session = Depends(get_db)):
+    """Connect the project-specific DB for this project, disconnecting any other.
+
+    If the per-project DB file does not yet exist it is created and any data
+    for this project that lives in the currently-connected DB is migrated into
+    it automatically.
+    """
+    project = _get_project_or_404(db, project_id)
+    db_name = project.project_number
+
+    target_path = project_manager.databases_dir / _dm.safe_db_filename(db_name)
+
+    if not target_path.exists():
+        # Create schema in the new file.
+        try:
+            project_manager.create_database(db_name)
+        except (ValueError, OSError) as e:
+            raise HTTPException(400, f"Cannot create project database: {e}")
+
+        # Migrate any data that already exists in the currently-connected DB.
+        if project_manager.current_path:
+            try:
+                _migrate_project_data(
+                    project_manager.current_path, str(target_path), project_id
+                )
+            except Exception:
+                pass  # migration is best-effort; new DB stays empty if it fails
+
+    try:
+        project_manager.connect(db_name)
+    except (FileNotFoundError, ValueError) as e:
+        raise HTTPException(404, f"Project database not found: {e}")
+
+    return {
+        "role": project_manager.role,
+        "connected": project_manager.connected,
+        "current": project_manager.current,
+        "path": project_manager.current_path,
+    }
 
 
 @router.get("/{project_id}", response_model=ProjectRead)

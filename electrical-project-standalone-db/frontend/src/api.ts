@@ -4,9 +4,26 @@
 // proxies them to the FastAPI backend (see vite.config.ts).
 
 import type {
+  CatalogGroup,
+  CatalogGroupCreate,
+  CatalogGroupUpdate,
+  CatalogGroupTree,
+  CatalogItem,
+  CatalogItemCreate,
+  CatalogItemUpdate,
+  ColumnDef,
+  ColumnDefCreate,
+  ColumnDefUpdate,
+  CustomRow,
+  UsageResult,
   ConnectionStatus,
   DatabaseInfo,
   DatabaseListResponse,
+  ErdLayout,
+  ErdRelationship,
+  ErdRelationshipCreate,
+  ErdRelationshipUpdate,
+  ErdSchema,
   FsListing,
   ListResponse,
   Row,
@@ -60,9 +77,38 @@ function query(params?: Record<string, unknown>): string {
   return parts.length ? `?${parts.join("&")}` : "";
 }
 
+/** Build a CRUD client for one of the database-management surfaces (catalog,
+ *  project, or the legacy /databases alias).  All three share the same shape. */
+function makeDbClient(prefix: string) {
+  return {
+    list: () => request<DatabaseListResponse>("GET", prefix),
+    status: () => request<ConnectionStatus>("GET", `${prefix}/status`),
+    create: (name: string) =>
+      request<DatabaseInfo>("POST", prefix, { name }),
+    connect: (name: string) =>
+      request<ConnectionStatus>(
+        "POST",
+        `${prefix}/${encodeURIComponent(name)}/connect`,
+      ),
+    open: (path: string) =>
+      request<ConnectionStatus>("POST", `${prefix}/open`, { path }),
+    disconnect: () =>
+      request<ConnectionStatus>("POST", `${prefix}/disconnect`),
+    rename: (name: string, newName: string) =>
+      request<DatabaseInfo>("PUT", `${prefix}/${encodeURIComponent(name)}`, {
+        new_name: newName,
+      }),
+    remove: (name: string) =>
+      request<void>("DELETE", `${prefix}/${encodeURIComponent(name)}`),
+  };
+}
+
 export const api = {
   list: (slug: string, params?: Record<string, unknown>) =>
     request<ListResponse>("GET", `/${slug}${query(params)}`),
+
+  activateProject: (id: number) =>
+    request<ConnectionStatus>("POST", `/projects/${id}/activate`),
 
   /** Merged view -- project rows with their catalog records joined in. */
   listMerged: (slug: string, params?: Record<string, unknown>) =>
@@ -101,29 +147,19 @@ export const api = {
       { content },
     ),
 
-  // Database Browser -- manage the database files and the active connection.
-  databases: {
-    list: () => request<DatabaseListResponse>("GET", "/databases"),
-    status: () => request<ConnectionStatus>("GET", "/databases/status"),
-    create: (name: string) =>
-      request<DatabaseInfo>("POST", "/databases", { name }),
-    connect: (name: string) =>
-      request<ConnectionStatus>(
-        "POST",
-        `/databases/${encodeURIComponent(name)}/connect`,
-      ),
-    /** Connect to a database file at an arbitrary filesystem path. */
-    open: (path: string) =>
-      request<ConnectionStatus>("POST", "/databases/open", { path }),
-    disconnect: () =>
-      request<ConnectionStatus>("POST", "/databases/disconnect"),
-    rename: (name: string, newName: string) =>
-      request<DatabaseInfo>("PUT", `/databases/${encodeURIComponent(name)}`, {
-        new_name: newName,
-      }),
-    remove: (name: string) =>
-      request<void>("DELETE", `/databases/${encodeURIComponent(name)}`),
-  },
+  // Database Browser -- catalog (system reference data) and project (per-project
+  // electrical data) databases are managed separately.  Each role has its own
+  // CRUD surface under /api/catalog-databases or /api/project-databases.
+  catalogDatabases: makeDbClient("/catalog-databases"),
+  projectDatabases: makeDbClient("/project-databases"),
+  /** Combined status of both connections (used by the app header). */
+  dbStatus: () =>
+    request<{ catalog: ConnectionStatus; project: ConnectionStatus }>(
+      "GET",
+      "/db-status",
+    ),
+  /** Backward-compat alias: pre-split UI talked to /api/databases. */
+  databases: makeDbClient("/databases"),
 
   // Filesystem browse -- backs the Database Browser's file picker.
   fs: {
@@ -132,5 +168,78 @@ export const api = {
         "GET",
         `/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`,
       ),
+  },
+
+  // Catalog Groups -- hierarchical group tree + CRUD.
+  catalogGroups: {
+    tree: () => request<CatalogGroupTree[]>("GET", "/catalog-groups/tree"),
+    list: () => request<ListResponse<CatalogGroup>>("GET", "/catalog-groups"),
+    get: (id: number) => request<CatalogGroup>("GET", `/catalog-groups/${id}`),
+    create: (body: CatalogGroupCreate) =>
+      request<CatalogGroup>("POST", "/catalog-groups", body),
+    update: (id: number, body: CatalogGroupUpdate) =>
+      request<CatalogGroup>("PUT", `/catalog-groups/${id}`, body),
+    remove: (id: number) => request<void>("DELETE", `/catalog-groups/${id}`),
+  },
+
+  // Catalog Items -- generic items in a cat_* table, filtered by group.
+  catalogItems: {
+    list: (slug: string, groupId?: number) =>
+      request<ListResponse<CatalogItem>>(
+        "GET",
+        `/${slug}${groupId != null ? `?catalog_group_id=${groupId}` : ""}`,
+      ),
+    create: (slug: string, body: CatalogItemCreate) =>
+      request<CatalogItem>("POST", `/${slug}`, body),
+    update: (slug: string, id: number, body: CatalogItemUpdate) =>
+      request<CatalogItem>("PUT", `/${slug}/${id}`, body),
+    remove: (slug: string, id: number) =>
+      request<void>("DELETE", `/${slug}/${id}`),
+  },
+
+  // Usage check -- tells the UI which rows reference a given catalog row.
+  checkUsage: (tableName: string, rowId: number) =>
+    request<UsageResult>("GET", `/usage-check/${tableName}/${rowId}`),
+
+  // Custom table schema (column defs + data rows for user-created groups).
+  customTable: {
+    listColumns: (groupId: number) =>
+      request<ColumnDef[]>("GET", `/catalog-groups/${groupId}/columns`),
+    createColumn: (groupId: number, body: ColumnDefCreate) =>
+      request<ColumnDef>("POST", `/catalog-groups/${groupId}/columns`, body),
+    updateColumn: (groupId: number, colId: number, body: ColumnDefUpdate) =>
+      request<ColumnDef>("PUT", `/catalog-groups/${groupId}/columns/${colId}`, body),
+    deleteColumn: (groupId: number, colId: number) =>
+      request<void>("DELETE", `/catalog-groups/${groupId}/columns/${colId}`),
+    listRows: (groupId: number) =>
+      request<CustomRow[]>("GET", `/catalog-groups/${groupId}/rows`),
+    createRow: (groupId: number, data: Record<string, unknown>) =>
+      request<CustomRow>("POST", `/catalog-groups/${groupId}/rows`, { row_data: data }),
+    updateRow: (groupId: number, rowId: number, data: Record<string, unknown>) =>
+      request<CustomRow>("PUT", `/catalog-groups/${groupId}/rows/${rowId}`, { row_data: data }),
+    deleteRow: (groupId: number, rowId: number) =>
+      request<void>("DELETE", `/catalog-groups/${groupId}/rows/${rowId}`),
+  },
+
+  // ERD -- schema introspection, layout persistence, relationship CRUD.
+  erd: {
+    schema: () => request<ErdSchema>("GET", "/erd/schema"),
+
+    getLayout: () => request<ErdLayout>("GET", "/erd/layout"),
+
+    saveLayout: (positions: ErdLayout) =>
+      request<{ saved: number }>("PUT", "/erd/layout", { positions }),
+
+    listRelationships: () =>
+      request<ErdRelationship[]>("GET", "/erd/relationships"),
+
+    createRelationship: (body: ErdRelationshipCreate) =>
+      request<ErdRelationship>("POST", "/erd/relationships", body),
+
+    updateRelationship: (id: number, body: ErdRelationshipUpdate) =>
+      request<ErdRelationship>("PUT", `/erd/relationships/${id}`, body),
+
+    deleteRelationship: (id: number) =>
+      request<void>("DELETE", `/erd/relationships/${id}`),
   },
 };

@@ -76,8 +76,10 @@ export interface RecentDatabase {
   exists: boolean;
 }
 
-/** Which database, if any, is currently connected. */
+/** Which database, if any, is currently connected for a given role. */
 export interface ConnectionStatus {
+  /** "catalog" or "project" (empty string before first refresh). */
+  role: string;
   connected: boolean;
   current: string | null;
   path: string | null;
@@ -94,6 +96,181 @@ export interface FsEntry {
   path: string;
   size_bytes?: number | null;
   modified?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// ERD types
+// ---------------------------------------------------------------------------
+
+export interface ErdColumn {
+  cid: number;
+  name: string;
+  type: string;
+  notnull: boolean;
+  default: string | null;
+  pk: boolean;
+}
+
+export interface ErdForeignKey {
+  id: number;
+  seq: number;
+  ref_table: string;
+  from_col: string;
+  to_col: string;
+  on_update: string;
+  on_delete: string;
+}
+
+export interface ErdTableSchema {
+  columns: ErdColumn[];
+  foreign_keys: ErdForeignKey[];
+}
+
+/** Full schema: table_name → table definition */
+export type ErdSchema = Record<string, ErdTableSchema>;
+
+export interface ErdNodePosition {
+  x: number;
+  y: number;
+  collapsed: boolean;
+}
+
+/** Saved layout: table_name → position */
+export type ErdLayout = Record<string, ErdNodePosition>;
+
+export type RelType = "ONE_TO_ONE" | "ONE_TO_MANY" | "MANY_TO_MANY";
+export type CascadeOp = "NO ACTION" | "RESTRICT" | "SET NULL" | "SET DEFAULT" | "CASCADE";
+
+/** A user-defined / annotated relationship (stored in erd_relationships). */
+export interface ErdRelationship {
+  id: number;
+  parent_table: string;
+  child_table: string;
+  foreign_key: string | null;
+  rel_type: RelType;
+  cascade_update: CascadeOp;
+  cascade_delete: CascadeOp;
+  label: string | null;
+  notes: string | null;
+}
+
+export type ErdRelationshipCreate = Omit<ErdRelationship, "id">;
+export type ErdRelationshipUpdate = Partial<ErdRelationshipCreate>;
+
+/** The data payload stored on each React Flow table node.
+ *  Extends Record<string, unknown> so React Flow v12 accepts it as node data. */
+export interface ErdTableNodeData extends Record<string, unknown> {
+  tableName: string;
+  columns: ErdColumn[];
+  collapsed: boolean;
+}
+
+/** Edge data: either a FK-derived edge or a user-defined relationship.
+ *  Extends Record<string, unknown> so React Flow v12 accepts it as edge data. */
+export interface ErdEdgeData extends Record<string, unknown> {
+  source: "fk" | "user";
+  rel_type: RelType;
+  cascade_update?: string;
+  cascade_delete?: string;
+  label?: string | null;
+  rel_id?: number;
+  from_col?: string;
+  to_col?: string;
+  foreign_key?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Catalog group hierarchy types
+// ---------------------------------------------------------------------------
+
+export interface CatalogGroup {
+  id: number;
+  parent_group_id: number | null;
+  group_name: string;
+  group_code: string;
+  description: string | null;
+  display_order: number;
+  is_active: boolean;
+  linked_table: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CatalogGroupCreate = Omit<CatalogGroup, "id" | "created_at" | "updated_at">;
+export type CatalogGroupUpdate = Partial<CatalogGroupCreate>;
+
+export interface CatalogGroupTree {
+  id: number;
+  group_name: string;
+  group_code: string;
+  description: string | null;
+  display_order: number;
+  is_active: boolean;
+  linked_table: string | null;
+  children: CatalogGroupTree[];
+}
+
+/** A generic item from any cat_* catalog table. */
+export interface CatalogItem {
+  id: number;
+  catalog_group_id: number | null;
+  code: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CatalogItemCreate = Omit<CatalogItem, "id" | "created_at" | "updated_at">;
+export type CatalogItemUpdate = Partial<CatalogItemCreate>;
+
+// ---------------------------------------------------------------------------
+// Row usage check (referential integrity guard)
+// ---------------------------------------------------------------------------
+
+export interface TableRef {
+  table: string;
+  column: string;
+  count: number;
+}
+
+export interface UsageResult {
+  table: string;
+  id: number;
+  references: TableRef[];
+  total: number;
+}
+
+// ---------------------------------------------------------------------------
+// Custom table schema types (catalog_column_defs + catalog_custom_rows)
+// ---------------------------------------------------------------------------
+
+export type CustomColType = "text" | "textarea" | "number" | "bool";
+
+export interface ColumnDef {
+  id: number;
+  catalog_group_id: number;
+  col_name: string;
+  col_label: string;
+  col_type: CustomColType;
+  required: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ColumnDefCreate = Omit<ColumnDef, "id" | "catalog_group_id" | "created_at" | "updated_at">;
+export type ColumnDefUpdate = Partial<ColumnDefCreate>;
+
+export interface CustomRow {
+  id: number;
+  catalog_group_id: number;
+  row_data: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
 }
 
 /** The listing of one directory. */

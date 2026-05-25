@@ -96,6 +96,7 @@ class LocationCreate(ORMModel):
     area: str | None = None
     process_system: str | None = None
     indoor_outdoor: IndoorOutdoor | None = None
+    typical_facility: str | None = None
     parent_location_id: int | None = None
     notes: str | None = None
 

@@ -6,15 +6,18 @@ specific project.  Every row carries a ``project_id``.
 The Merge Principle
 -------------------
 A project row is created by *merging* a catalog record (permanent data) with
-project-specific data (tags, locations, references, settings).  That merge is a
-**foreign key** -- e.g. ``project_equipment.catalog_equipment_id`` -- never a
-copy of the catalog's columns.  The catalog stays the single source of truth.
+project-specific data (tags, locations, references, settings).  That merge used
+to be a database-level foreign key — but the catalog now lives in a SEPARATE
+SQLite file (so the catalog can be shared across projects), so the
+``catalog_*_id`` columns are now plain integer references with no DB-level FK.
+The application validates them against the catalog DB; integrity is enforced
+in code, not by SQLite.
 
-Each catalog-linked table also supports a **custom / one-off path**: the catalog
-FK is nullable, and the row carries ``local_*`` columns that hold the permanent
-attributes directly when no catalog record fits.  A named CHECK constraint
-("catalog reference OR custom data, not empty") guarantees a row always has one
-or the other.
+Each catalog-linked table also supports a **custom / one-off path**: the
+catalog ID is nullable, and the row carries ``local_*`` columns that hold the
+permanent attributes directly when no catalog record fits.  A named CHECK
+constraint ("catalog reference OR custom data, not empty") guarantees a row
+always has one or the other.
 """
 
 from __future__ import annotations
@@ -29,17 +32,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
 from .base import CommonMixin
-from .catalogs import (
-    CatalogCable,
-    CatalogDevice,
-    CatalogEquipment,
-    CatalogInstrument,
-    CatalogIOModule,
-)
 from .enums import (
     AlarmPriority,
     CableEnd,
@@ -111,6 +107,7 @@ class ProjectLocation(Base, CommonMixin):
     indoor_outdoor: Mapped[IndoorOutdoor | None] = mapped_column(
         Enum(IndoorOutdoor, native_enum=False)
     )
+    typical_facility: Mapped[str | None] = mapped_column(String(120))
     # Self-reference for a location hierarchy (a room inside a building, ...).
     parent_location_id: Mapped[int | None] = mapped_column(
         ForeignKey("project_locations.id", ondelete="SET NULL")
@@ -136,10 +133,9 @@ class ProjectEquipment(Base, CommonMixin):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
     )
-    # Merge link to the catalog (NULL => custom / one-off item).
-    catalog_equipment_id: Mapped[int | None] = mapped_column(
-        ForeignKey("catalog_equipment.id", ondelete="RESTRICT")
-    )
+    # Soft reference to catalog_equipment.id in the catalog DB (no DB-level FK
+    # because the catalog lives in a separate SQLite file).
+    catalog_equipment_id: Mapped[int | None] = mapped_column(Integer)
 
     # --- project-specific fields ---
     equipment_tag: Mapped[str] = mapped_column(String(60), nullable=False)
@@ -170,8 +166,6 @@ class ProjectEquipment(Base, CommonMixin):
     local_model: Mapped[str | None] = mapped_column(String(120))
     local_rated_voltage: Mapped[str | None] = mapped_column(String(40))
     local_rated_current: Mapped[str | None] = mapped_column(String(40))
-
-    catalog: Mapped[CatalogEquipment | None] = relationship()
 
     @property
     def is_custom(self) -> bool:
@@ -228,9 +222,8 @@ class ProjectCable(Base, CommonMixin):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
     )
-    catalog_cable_id: Mapped[int | None] = mapped_column(
-        ForeignKey("catalog_cables.id", ondelete="RESTRICT")
-    )
+    # Soft reference to catalog_cables.id in the catalog DB (no DB-level FK).
+    catalog_cable_id: Mapped[int | None] = mapped_column(Integer)
 
     # --- project-specific fields ---
     cable_tag: Mapped[str] = mapped_column(String(60), nullable=False)
@@ -265,8 +258,6 @@ class ProjectCable(Base, CommonMixin):
     local_insulation_type: Mapped[str | None] = mapped_column(String(40))
     local_voltage_rating: Mapped[str | None] = mapped_column(String(40))
 
-    catalog: Mapped[CatalogCable | None] = relationship()
-
     @property
     def is_custom(self) -> bool:
         return self.catalog_cable_id is None
@@ -291,9 +282,8 @@ class ProjectInstrument(Base, CommonMixin):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
     )
-    catalog_instrument_id: Mapped[int | None] = mapped_column(
-        ForeignKey("catalog_instruments.id", ondelete="RESTRICT")
-    )
+    # Soft reference to catalog_instruments.id in the catalog DB.
+    catalog_instrument_id: Mapped[int | None] = mapped_column(Integer)
 
     # --- project-specific fields ---
     instrument_tag: Mapped[str] = mapped_column(String(60), nullable=False)  # ISA tag
@@ -327,8 +317,6 @@ class ProjectInstrument(Base, CommonMixin):
     local_signal_type: Mapped[str | None] = mapped_column(String(40))
     local_accuracy: Mapped[str | None] = mapped_column(String(60))
 
-    catalog: Mapped[CatalogInstrument | None] = relationship()
-
     @property
     def is_custom(self) -> bool:
         return self.catalog_instrument_id is None
@@ -352,9 +340,8 @@ class ProjectIOPoint(Base, CommonMixin):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
     )
-    catalog_io_module_id: Mapped[int | None] = mapped_column(
-        ForeignKey("catalog_io_modules.id", ondelete="RESTRICT")
-    )
+    # Soft reference to catalog_io_modules.id in the catalog DB.
+    catalog_io_module_id: Mapped[int | None] = mapped_column(Integer)
 
     # --- project-specific fields ---
     io_tag: Mapped[str | None] = mapped_column(String(60))
@@ -389,8 +376,6 @@ class ProjectIOPoint(Base, CommonMixin):
 
     # --- local permanent attributes (used when catalog_io_module_id is NULL) ---
     local_io_module_model: Mapped[str | None] = mapped_column(String(120))
-
-    catalog: Mapped[CatalogIOModule | None] = relationship()
 
     @property
     def is_custom(self) -> bool:
@@ -445,9 +430,8 @@ class ProjectPanelComponent(Base, CommonMixin):
     control_panel_id: Mapped[int] = mapped_column(
         ForeignKey("project_control_panels.id", ondelete="RESTRICT"), nullable=False
     )
-    catalog_device_id: Mapped[int | None] = mapped_column(
-        ForeignKey("catalog_devices.id", ondelete="RESTRICT")
-    )
+    # Soft reference to catalog_devices.id in the catalog DB.
+    catalog_device_id: Mapped[int | None] = mapped_column(Integer)
 
     # --- project-specific fields ---
     component_tag: Mapped[str | None] = mapped_column(String(60))
@@ -467,8 +451,6 @@ class ProjectPanelComponent(Base, CommonMixin):
     )
     local_model: Mapped[str | None] = mapped_column(String(120))
     local_ratings: Mapped[str | None] = mapped_column(String(120))
-
-    catalog: Mapped[CatalogDevice | None] = relationship()
 
     @property
     def is_custom(self) -> bool:

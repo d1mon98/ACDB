@@ -24,6 +24,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.config import DATABASES_DIR, DEFAULT_DATABASE
 from app.database import make_engine
+from app.models.catalog_groups import CatalogGroup
 from app.models.catalogs import (
     CatalogCable,
     CatalogDevice,
@@ -105,6 +106,7 @@ _DELETE_ORDER = [
     CatalogDevice,
     CatalogCable,
     CatalogManufacturer,
+    CatalogGroup,
 ]
 
 
@@ -116,23 +118,101 @@ def wipe(db) -> None:
     print("  - existing data wiped")
 
 
-def seed_catalogs(db) -> dict[str, object]:
-    """Insert the Class A catalog records.  Returns a code -> ORM-object map."""
+def seed_catalog_groups(db) -> dict[str, object]:
+    """Insert the 10 top-level catalog groups (and representative sub-groups).
+
+    Returns a code → ORM-object map for use by seed_catalogs().
+    """
+    # Top-level groups
+    groups_data = [
+        ("GRP-01", "Electrical Power Systems",      1,  None,
+         "Voltage classes, grounding types, and phase/wire configurations."),
+        ("GRP-02", "Electrical Equipment",          2,  None,
+         "General equipment types, enclosures, and mounting standards."),
+        ("GRP-03", "Distribution Equipment",        3,  None,
+         "Switchgear, switchboards, MCCs, panelboards, and transformers."),
+        ("GRP-04", "Protection and Control Devices",4,  None,
+         "Breakers, fuses, relays, overloads, disconnect switches, VFDs."),
+        ("GRP-05", "Cable and Raceway",             5,  None,
+         "Cable types, conduit, cable tray, insulation, conductor materials."),
+        ("GRP-06", "Instrumentation",               6,  None,
+         "Instrument models, signal types, measurement types, process connections."),
+        ("GRP-07", "Controls and Automation",       7,  None,
+         "PLC platforms, I/O modules, SCADA, network devices, protocols."),
+        ("GRP-08", "Locations and Classification",  8,  None,
+         "Area types, room types, hazardous area and environmental ratings."),
+        ("GRP-09", "Drawings and Documents",        9,  None,
+         "Drawing types, revision statuses, document types, submittals."),
+        ("GRP-10", "Construction and Installation", 10, None,
+         "Installation methods, mounting details, conduit routing, terminations."),
+    ]
+    top = {}
+    for code, name, order, parent, desc in groups_data:
+        g = CatalogGroup(
+            group_code=code, group_name=name, display_order=order,
+            parent_group_id=parent, description=desc,
+        )
+        db.add(g)
+        top[code] = g
+    db.flush()
+
+    # Sub-groups linking the 6 legacy complex tables
+    legacy_subs = [
+        ("GRP-02-MFR",  "GRP-02", "Manufacturers",            1, "catalog_manufacturers"),
+        ("GRP-02-EQ",   "GRP-02", "Equipment Models",         2, "catalog_equipment"),
+        ("GRP-05-CAB",  "GRP-05", "Cable Types",              1, "catalog_cables"),
+        ("GRP-06-INST", "GRP-06", "Instrument Models",        1, "catalog_instruments"),
+        ("GRP-07-IO",   "GRP-07", "PLC / RIO I/O Modules",    2, "catalog_io_modules"),
+        ("GRP-07-DEV",  "GRP-07", "Control Panel Devices",    3, "catalog_devices"),
+    ]
+    subs = {}
+    for code, parent_code, name, order, linked in legacy_subs:
+        g = CatalogGroup(
+            group_code=code, group_name=name, display_order=order,
+            parent_group_id=top[parent_code].id, linked_table=linked,
+        )
+        db.add(g)
+        subs[code] = g
+    db.flush()
+
+    all_groups = {**top, **subs}
+    print(f"  - catalog groups seeded: {len(all_groups)} groups")
+    return all_groups
+
+
+def seed_catalogs(db, groups: dict | None = None) -> dict[str, object]:
+    """Insert the Class A catalog records.  Returns a code -> ORM-object map.
+
+    If ``groups`` is provided (from :func:`seed_catalog_groups`), each entry is
+    linked to its corresponding catalog group.
+    """
+    mfr_group_id    = groups["GRP-02-MFR"].id  if groups else None
+    eq_group_id     = groups["GRP-02-EQ"].id   if groups else None
+    cab_group_id    = groups["GRP-05-CAB"].id  if groups else None
+    inst_group_id   = groups["GRP-06-INST"].id if groups else None
+    io_group_id     = groups["GRP-07-IO"].id   if groups else None
+    dev_group_id    = groups["GRP-07-DEV"].id  if groups else None
+
     manufacturers = {
         "ACME": CatalogManufacturer(
-            name="Acme Electrical Mfg.", abbreviation="ACME", country="USA"
+            catalog_group_id=mfr_group_id,
+            name="Acme Electrical Mfg.", abbreviation="ACME", country="USA",
         ),
         "SPC": CatalogManufacturer(
-            name="Standard Power Co.", abbreviation="SPC", country="USA"
+            catalog_group_id=mfr_group_id,
+            name="Standard Power Co.", abbreviation="SPC", country="USA",
         ),
         "GII": CatalogManufacturer(
-            name="Generic Instruments Inc.", abbreviation="GII", country="USA"
+            catalog_group_id=mfr_group_id,
+            name="Generic Instruments Inc.", abbreviation="GII", country="USA",
         ),
         "APX": CatalogManufacturer(
-            name="Apex Controls Ltd.", abbreviation="APX", country="Canada"
+            catalog_group_id=mfr_group_id,
+            name="Apex Controls Ltd.", abbreviation="APX", country="Canada",
         ),
         "UCC": CatalogManufacturer(
-            name="Universal Cable Co.", abbreviation="UCC", country="USA"
+            catalog_group_id=mfr_group_id,
+            name="Universal Cable Co.", abbreviation="UCC", country="USA",
         ),
     }
     db.add_all(manufacturers.values())
@@ -140,6 +220,7 @@ def seed_catalogs(db) -> dict[str, object]:
 
     equipment = {
         "SWGR": CatalogEquipment(
+            catalog_group_id=eq_group_id,
             manufacturer_id=manufacturers["ACME"].id,
             category=EquipmentCategory.SWITCHGEAR,
             model_series="ACE-SWGR-2000",
@@ -151,6 +232,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic 480V low-voltage switchgear, 2000A bus.",
         ),
         "XFMR": CatalogEquipment(
+            catalog_group_id=eq_group_id,
             manufacturer_id=manufacturers["ACME"].id,
             category=EquipmentCategory.TRANSFORMER,
             model_series="ACE-TX-75",
@@ -161,6 +243,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic 75 kVA dry-type distribution transformer.",
         ),
         "PNL": CatalogEquipment(
+            catalog_group_id=eq_group_id,
             manufacturer_id=manufacturers["SPC"].id,
             category=EquipmentCategory.PANELBOARD,
             model_series="SPC-PNL-225",
@@ -173,6 +256,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic 225A lighting & appliance panelboard.",
         ),
         "MCC": CatalogEquipment(
+            catalog_group_id=eq_group_id,
             manufacturer_id=manufacturers["SPC"].id,
             category=EquipmentCategory.MCC,
             model_series="SPC-MCC-600",
@@ -184,6 +268,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic 480V motor control center, 600A bus.",
         ),
         "VFD": CatalogEquipment(
+            catalog_group_id=eq_group_id,
             manufacturer_id=manufacturers["APX"].id,
             category=EquipmentCategory.VFD,
             model_series="APX-VFD-50",
@@ -198,6 +283,7 @@ def seed_catalogs(db) -> dict[str, object]:
 
     cables = {
         "PWR250": CatalogCable(
+            catalog_group_id=cab_group_id,
             cable_type_code="PWR-600V-3C-250-CU",
             conductor_material=ConductorMaterial.CU,
             insulation_type="XHHW-2",
@@ -208,6 +294,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic 600V power cable, 3-conductor 250 kcmil copper.",
         ),
         "PWR4": CatalogCable(
+            catalog_group_id=cab_group_id,
             cable_type_code="PWR-600V-3C-4AWG-CU",
             conductor_material=ConductorMaterial.CU,
             insulation_type="THHN",
@@ -218,6 +305,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic 600V power cable, 3-conductor #4 AWG copper.",
         ),
         "CTL14": CatalogCable(
+            catalog_group_id=cab_group_id,
             cable_type_code="CTL-600V-7C-14AWG-CU",
             conductor_material=ConductorMaterial.CU,
             insulation_type="THHN",
@@ -228,6 +316,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic 600V control cable, 7-conductor #14 AWG copper.",
         ),
         "INST16": CatalogCable(
+            catalog_group_id=cab_group_id,
             cable_type_code="INST-300V-1PR-16AWG-SH",
             conductor_material=ConductorMaterial.CU,
             insulation_type="PVC",
@@ -243,6 +332,7 @@ def seed_catalogs(db) -> dict[str, object]:
 
     instruments = {
         "PT": CatalogInstrument(
+            catalog_group_id=inst_group_id,
             manufacturer_id=manufacturers["GII"].id,
             instrument_type=InstrumentType.PRESSURE,
             measurement_principle="Capacitance",
@@ -255,6 +345,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic gauge pressure transmitter.",
         ),
         "FT": CatalogInstrument(
+            catalog_group_id=inst_group_id,
             manufacturer_id=manufacturers["GII"].id,
             instrument_type=InstrumentType.FLOW,
             measurement_principle="Magnetic",
@@ -267,6 +358,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic magnetic flow meter.",
         ),
         "LT": CatalogInstrument(
+            catalog_group_id=inst_group_id,
             manufacturer_id=manufacturers["GII"].id,
             instrument_type=InstrumentType.LEVEL,
             measurement_principle="Guided-wave radar",
@@ -279,6 +371,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic radar level transmitter.",
         ),
         "TT": CatalogInstrument(
+            catalog_group_id=inst_group_id,
             manufacturer_id=manufacturers["APX"].id,
             instrument_type=InstrumentType.TEMPERATURE,
             measurement_principle="RTD Pt100",
@@ -295,6 +388,7 @@ def seed_catalogs(db) -> dict[str, object]:
 
     io_modules = {
         "AI8": CatalogIOModule(
+            catalog_group_id=io_group_id,
             manufacturer_id=manufacturers["APX"].id,
             module_model="APX-AI-8",
             io_type=IOType.AI,
@@ -303,6 +397,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic 8-channel analog input module.",
         ),
         "AO4": CatalogIOModule(
+            catalog_group_id=io_group_id,
             manufacturer_id=manufacturers["APX"].id,
             module_model="APX-AO-4",
             io_type=IOType.AO,
@@ -311,6 +406,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic 4-channel analog output module.",
         ),
         "DI16": CatalogIOModule(
+            catalog_group_id=io_group_id,
             manufacturer_id=manufacturers["APX"].id,
             module_model="APX-DI-16",
             io_type=IOType.DI,
@@ -319,6 +415,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic 16-channel discrete input module.",
         ),
         "DO16": CatalogIOModule(
+            catalog_group_id=io_group_id,
             manufacturer_id=manufacturers["APX"].id,
             module_model="APX-DO-16",
             io_type=IOType.DO,
@@ -331,6 +428,7 @@ def seed_catalogs(db) -> dict[str, object]:
 
     devices = {
         "CPU": CatalogDevice(
+            catalog_group_id=dev_group_id,
             manufacturer_id=manufacturers["APX"].id,
             device_category=DeviceCategory.PLC_CPU,
             model="APX-CPU-1500",
@@ -338,6 +436,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic PLC processor module.",
         ),
         "HMI": CatalogDevice(
+            catalog_group_id=dev_group_id,
             manufacturer_id=manufacturers["APX"].id,
             device_category=DeviceCategory.HMI,
             model="APX-HMI-10",
@@ -345,6 +444,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic 10-inch operator interface.",
         ),
         "PS": CatalogDevice(
+            catalog_group_id=dev_group_id,
             manufacturer_id=manufacturers["ACME"].id,
             device_category=DeviceCategory.POWER_SUPPLY,
             model="ACE-PS-24-10",
@@ -352,6 +452,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic DIN-rail switching power supply.",
         ),
         "MCB": CatalogDevice(
+            catalog_group_id=dev_group_id,
             manufacturer_id=manufacturers["SPC"].id,
             device_category=DeviceCategory.CIRCUIT_BREAKER,
             model="SPC-MCB-20A",
@@ -359,6 +460,7 @@ def seed_catalogs(db) -> dict[str, object]:
             description="Generic miniature circuit breaker.",
         ),
         "RLY": CatalogDevice(
+            catalog_group_id=dev_group_id,
             manufacturer_id=manufacturers["GII"].id,
             device_category=DeviceCategory.RELAY,
             model="GII-RLY-4PDT",
@@ -835,7 +937,8 @@ def main() -> None:
         if args.reset:
             wipe(db)
 
-        catalog = seed_catalogs(db)
+        groups  = seed_catalog_groups(db)
+        catalog = seed_catalogs(db, groups)
         seed_example_project(db, catalog)
         db.commit()
         print("Done.")
